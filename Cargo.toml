@@ -1,0 +1,6 @@
+[workspace]
+members = [ 
+    "oc_user",
+    "public", "thread_manager", "route_websocket_client"]
+
+resolver = "2"

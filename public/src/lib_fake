@@ -1,0 +1,113 @@
+use std::{thread, time};
+use serde::{Serialize, Deserialize};
+use serde_json::{self, Error as SerdeError};
+use rand::Rng;
+use base64::{engine::general_purpose, Engine};
+
+#[macro_export]
+macro_rules! DBG_LOG {
+    ($($arg:expr),*) => {
+        {
+            let file = std::file!();
+            let line = std::line!();
+
+            let args = vec![$(format!("{:?}", $arg)),*];
+
+            let args_str = args.join("");
+
+            println!("{:<20}|{:^5}| logs: {}", file, line, args_str);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! DBG_ERR {
+    ($($arg:expr),*) => {
+        {
+            let file = std::file!();
+            let line = std::line!();
+
+            let args = vec![$(format!("{:?}", $arg)),*];
+
+            let args_str = args.join("");
+
+            println!("\x1b[31m{:<20}|{:^5}| logs: {}\x1b[0m", file, line, args_str);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! define_static {
+    ($name:ident, $ty:ty, $expr:expr) => {
+        static $name: once_cell::sync::Lazy<$ty> = once_cell::sync::Lazy::new(|| $expr);
+    };
+}
+
+#[macro_export]
+macro_rules! define_global {
+    ($name:ident, $ty:ty, $expr:expr) => {
+        static $name: once_cell::sync::Lazy<std::sync::Mutex<$ty>> = once_cell::sync::Lazy::new(|| std::sync::Mutex::new($expr));
+    };
+}
+
+#[macro_export]
+macro_rules! define_global_async {
+    ($name:ident, $ty:ty, $expr:expr) => {
+        static $name: once_cell::sync::Lazy<tokio::sync::Mutex<$ty>> = once_cell::sync::Lazy::new(|| tokio::sync::Mutex::new($expr));
+    };
+}
+
+pub fn rand_u32() -> u32{
+    let mut rng = rand::rng();
+    let n: u32 = rng.random();           // generate a random num
+    n
+}
+
+pub fn rand_u64() -> u64{
+    let mut rng = rand::rng();
+    let n: u64 = rng.random();           // generate a random num
+    n
+}
+
+pub fn sleep_ms(duration_ms : u64){
+    let duration = time::Duration::from_millis(duration_ms);
+    thread::sleep(duration);
+}
+
+
+pub fn parse_json<T>(json_str: &str) -> Result<T, SerdeError>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    if let Ok(value) = serde_json::from_str::<T>(json_str) {
+        return Ok(value);
+    }
+
+    if let Ok(unescaped) = serde_json::from_str::<String>(json_str) {
+        serde_json::from_str::<T>(&unescaped)
+    } else {
+        serde_json::from_str::<T>(json_str)
+    }
+}
+
+pub fn build_json<T>(value: &T) -> Result<String, SerdeError>
+where
+    T: Serialize,
+{
+    serde_json::to_string(value)
+}
+
+pub fn read_tiny_file(file_name: String) -> Result<String, std::io::Error>{
+
+    match std::fs::read_to_string(&file_name){
+        Ok(contents) => Ok(contents),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn now_time_ms() -> u64 {
+    let now = time::SystemTime::now();
+    let duration_since_epoch = now.duration_since(time::UNIX_EPOCH)
+        .expect("Time went backwards");
+    duration_since_epoch.as_millis() as u64
+}
