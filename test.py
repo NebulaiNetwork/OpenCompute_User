@@ -4,7 +4,7 @@ import numpy as np
 
 import time
 
-oc = OcUser("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjoiZHVudHkiLCJleHAiOjE3NDg2ODM2MTJ9.1V0O4Ywr9a9NA6Oxp_Kl-1ixRrwfedTPuTsxAXXHwrM", "./test.rs", 1)
+oc = OcUser("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjoiZHVudHkiLCJleHAiOjE3NTE2OTY1ODZ9.YN0riVjbOdQfogHx34jWiaYAwE509TQwkbQYNNUGIjU", "./test.rs", 1)
 
 def test_add_batch():
 
@@ -13,7 +13,7 @@ def test_add_batch():
     # muti call run_code，collect task_id
     task_ids = []
     for _ in range(5):
-        task_id = oc.run_code("add", (1, 2), "i64")
+        task_id = oc.run_code("add", (1, 2), "i32")
         task_ids.append(task_id)
 
     print("Task ID：", task_ids)
@@ -23,7 +23,7 @@ def test_add_batch():
 
     print("Results:", results)
 
-#test_batch()
+#test_add_batch()
 
 
 def naive_matmul(a, b):
@@ -52,7 +52,7 @@ def test_matmul_parallel():
     # Parallel dispatch for each row
     task_ids = []
     for i in range(size):
-        task_id = oc.run_code("gpu_matmul_row", (a[i], b), "Vec<f64>")
+        task_id = oc.run_code("gpu_matmul_row", (a[i], b), "Vec<f32>")
         task_ids.append(task_id)
 
     # Wait for all sub-tasks
@@ -88,7 +88,7 @@ def test_matmul_parallel():
 def test_matrix():
     time.sleep(5)
 
-    size = 200
+    size = 800
     a = np.random.rand(size, size).tolist()
     b = np.random.rand(size, size).tolist()
 

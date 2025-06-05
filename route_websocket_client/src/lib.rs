@@ -10,6 +10,7 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 
 type RouteCallback = Arc<dyn Fn(i16, String) -> BoxFuture<'static, ()> + Send + Sync>;
+type RouteBigPayloadCallback = Arc<dyn Fn(i16, String, String) -> BoxFuture<'static, ()> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct WsClient {
@@ -20,6 +21,8 @@ struct WsClientInner {
     uid: String,
     url: String,
     routes: HashMap<String, Arc<dyn Fn(i16, String) -> BoxFuture<'static, ()> + Send + Sync>>,
+    routes_big_payload: HashMap<String, Arc<dyn Fn(i16, String, String) -> BoxFuture<'static, ()> + Send + Sync>>,
+    
     tx: Sender<String>,
 }
 
@@ -44,6 +47,7 @@ impl WsClient {
             uid,
             url,
             routes: HashMap::new(),
+            routes_big_payload: HashMap::new(),
             tx,
         };
         Self {
@@ -63,6 +67,20 @@ impl WsClient {
 
         let mut inner = self.inner.lock().unwrap();
         inner.routes.insert(api.to_string(), cb);
+    }
+
+    pub fn route_ws_big_payload<F, Fut>(&self, api: &str, callback: F)
+    where
+        F: Fn(i16, String, String) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let cb: RouteBigPayloadCallback = Arc::new(move |code, payload, big_payload| {
+            let fut = callback(code, payload, big_payload);
+            Box::pin(fut) as BoxFuture<'static, ()>
+        });
+
+        let mut inner = self.inner.lock().unwrap();
+        inner.routes_big_payload.insert(api.to_string(), cb);
     }
 
     pub fn start_ws(&self) {
@@ -89,13 +107,41 @@ impl WsClient {
                             tokio::select! {
                                 Some(Ok(msg)) = ws_stream.next() => {
                                     if let Message::Text(text) = msg {
-                                        if let Ok(parsed) = serde_json::from_str::<WsResponse>(&text) {
-                                            let cb_opt = {
-                                                let locked = inner.lock().unwrap();
-                                                locked.routes.get(&parsed.r).cloned()
-                                            };
-                                            if let Some(cb) = cb_opt {
-                                                cb(parsed.c, parsed.p).await;
+
+                                        if text.len() < 4 {
+                                            continue;
+                                        }
+
+                                        let hex_len_str = &text[..4];
+                                        if let Ok(json_len) = u32::from_str_radix(hex_len_str, 16) {
+                                            let json_end = 4 + json_len as usize;
+                                            if text.len() < json_end {
+                                                continue;
+                                            }
+                                            let json_str = &text[4..json_end];
+
+                                            if let Ok(parsed) = serde_json::from_str::<WsResponse>(json_str) {
+                                                let big_payload = &text[json_end..];
+
+                                                if big_payload.len() > 0{
+                                                    let cb_opt = {
+                                                        let locked = inner.lock().unwrap();
+                                                        locked.routes_big_payload.get(&parsed.r).cloned()
+                                                    };
+
+                                                    if let Some(cb) = cb_opt {
+                                                        cb(parsed.c, parsed.p, big_payload.to_string()).await;
+                                                    }
+                                                }else{
+                                                    let cb_opt = {
+                                                        let locked = inner.lock().unwrap();
+                                                        locked.routes.get(&parsed.r).cloned()
+                                                    };
+
+                                                    if let Some(cb) = cb_opt {
+                                                        cb(parsed.c, parsed.p).await;
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -125,15 +171,30 @@ impl WsClient {
     }
 
     pub async fn send(&self, route: String, payload: String) {
+        self.send_big_payload(route, payload, "".to_string()).await;
+    }
+
+    pub async fn send_big_payload(&self, route: String, payload: String, big_payload: String) {
         let (msg, tx) = {
-            let locked = self.inner.lock().unwrap();
+            let locked: std::sync::MutexGuard<'_, WsClientInner> = self.inner.lock().unwrap();
             let req = WsRequest {
                 t: locked.uid.clone(),
                 r: route,
                 p: payload,
             };
-            let msg = serde_json::to_string(&req).unwrap();
-            (msg, locked.tx.clone())
+            let json_str = serde_json::to_string(&req).unwrap();
+
+            let hex_len = {
+                let mut s = format!("{:x}", json_str.len());
+                if s.len() < 4 {
+                    s = format!("{:0>4}", s);
+                }
+                s
+            };
+
+            let final_msg = hex_len + &json_str + &big_payload;
+
+            (final_msg, locked.tx.clone())
         };
 
         let _ = tx.send(msg).await;

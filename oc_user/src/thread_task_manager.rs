@@ -1,18 +1,18 @@
-use crate::{config, protocol::MsgInfo, IntoPyObject, PyObject, Python, PyAny};
-use public::{parse_json, DBG_ERR, DBG_LOG};
+use crate::{config, IntoPyObject, PyObject, Python, PyAny};
+use public::{DBG_ERR, DBG_LOG};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use thread_manager::{recv_msg, send_msg};
 
 #[derive(Deserialize, Serialize)]
-struct TaskInfo {
-    source_uid: String,
+pub struct TaskInfo {
+    operator_id: u64,
     error: String,
     result: String,
 }
 
-pub fn finish_task(msg_info: MsgInfo) {
-    send_msg::<MsgInfo>(config::THREAD_TASK_MANAGER, msg_info);
+pub fn finish_task(task_info: TaskInfo) {
+    send_msg::<TaskInfo>(config::THREAD_TASK_MANAGER, task_info);
 }
 
 pub fn query_task_list_result(
@@ -24,25 +24,23 @@ pub fn query_task_list_result(
     let mut results: HashMap<u64, String> = HashMap::new();
 
     while !waiting.is_empty() {
-        if let Some(msg) = recv_msg::<MsgInfo>(config::THREAD_TASK_MANAGER) {
-            if let Ok(task_info) = parse_json::<TaskInfo>(&msg.payload) {
-                let task_id = msg.operator_id;
+        if let Some(task_info) = recv_msg::<TaskInfo>(config::THREAD_TASK_MANAGER) {
+            let task_id = task_info.operator_id;
 
-                // DBG_LOG!("recv task[", task_id, "] result[", task_info.result, "]");
+            // DBG_LOG!("recv task[", task_id, "] result[", task_info.result, "]");
 
-                if task_info.error.len() != 0{
-                    DBG_ERR!("task id[", task_id, "] run error[", task_info.error, "]")
-                }else{
-                    if waiting.contains(&task_id) {
-                        results.insert(task_id, task_info.result);
-                        waiting.remove(&task_id);
-                    } else {
-                        DBG_LOG!("task {} not in waiting list, skip", task_id);
-                    }
+            if task_info.error.len() != 0{
+                DBG_ERR!("task id[", task_id, "] run error[", task_info.error, "]")
+            }else{
+                if waiting.contains(&task_id) {
+                    results.insert(task_id, task_info.result);
+                    waiting.remove(&task_id);
+                } else {
+                    DBG_LOG!("task {} not in waiting list, skip", task_id);
                 }
-            } else {
-                DBG_ERR!("task parser error.");
             }
+        } else {
+            DBG_ERR!("task parser error.");
         }
     }
 

@@ -5,7 +5,7 @@ use pyo3::types::{PyAny, PyAnyMethods, PyList, PyListMethods, PyTuple, PyTupleMe
 use serde_json::Value;
 use std::collections::HashMap;
 
-use public::{define_global, now_time_ms, rand_u64, read_tiny_file, DBG_ERR, DBG_LOG};
+use public::{define_global, rand_u64, read_tiny_file, DBG_ERR, DBG_LOG};
 
 use thread_manager::ThreadManager;
 
@@ -69,13 +69,13 @@ impl OcUser {
         args: &Bound<'_, PyTuple>,
         output: String,
     ) -> PyResult<u64> {
-        let start_time = now_time_ms();
+        //let start_time = now_time_ms();
 
         match normalize_input(args) {
             Ok(args_string) => {
 
-				let end_time = now_time_ms();
-				DBG_LOG!("normalize_input use[", end_time - start_time, "]");
+				//let end_time = now_time_ms();
+				//DBG_LOG!("normalize_input use[", end_time - start_time, "]");
 
                 let expect_output_type = match output.as_str() {
                     "i32" => 1_i16,
@@ -93,7 +93,7 @@ impl OcUser {
                     }
                 };
 
-				let start_time = now_time_ms();
+				//let start_time = now_time_ms();
 
                 protocol::user_run(
                     self.run_code_event,
@@ -103,8 +103,8 @@ impl OcUser {
                     expect_output_type,
                 );
 
-				let end_time = now_time_ms();
-				DBG_LOG!("user_run use[", end_time - start_time, "]");
+				//let end_time = now_time_ms();
+				//DBG_LOG!("user_run use[", end_time - start_time, "]");
 
                 self.task_array.push(self.op_id);
                 self.expect_results.insert(self.op_id, output);

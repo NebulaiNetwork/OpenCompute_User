@@ -19,12 +19,14 @@ use serde::{Deserialize, Serialize};
 struct WsClientMsg{
     route:  String,
     payload:  String,
+    big_payload: String,
 }
 
-pub fn send_msg_to_ws_server(route: String, payload: String){
+pub fn send_msg_to_ws_server(route: String, payload: String, big_payload: String){
     let tmp = WsClientMsg{
         route: route,
         payload: payload,
+        big_payload: big_payload,
     };
 
     send_msg::<WsClientMsg>(config::THREAD_WS_SEND, tmp);
@@ -43,7 +45,7 @@ pub fn thread_ws_send(token: String, ip: String){
 
         ws.route_ws("user/hello", client_process::user_hello);
         ws.route_ws("user/init", client_process::user_init);
-        ws.route_ws("user/run", client_process::user_run);
+        ws.route_ws_big_payload("user/run", client_process::user_run);
         ws.route_ws("user/close", client_process::user_close);
 
         ws.start_ws();
@@ -53,7 +55,7 @@ pub fn thread_ws_send(token: String, ip: String){
 
                 // DBG_LOG!("send route[", msg.route, "] payload size[", msg.payload.len(), "]");
                 
-                ws.send(msg.route, msg.payload).await;
+                ws.send_big_payload(msg.route, msg.payload, msg.big_payload).await;
             } else {
                 DBG_ERR!("thread_ws_send error");
                 break;
